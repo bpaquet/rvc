@@ -21,27 +21,28 @@
 module RVC
 
 class Shell
-  attr_reader :fs, :connections, :session
+  attr_reader :fs, :connections, :session, :raise_exception_on_task_error
   attr_accessor :debug
 
-  def initialize session
+  def initialize session, raise_exception_on_task_error = false
     @session = session
     @persist_ruby = false
     @fs = RVC::FS.new RVC::RootNode.new
     @ruby_evaluator = RubyEvaluator.new @fs
     @connections = {}
     @debug = false
+    @raise_exception_on_task_error = raise_exception_on_task_error
   end
 
   def eval_input input
     if input == '//'
       @persist_ruby = !@persist_ruby
-      return
+      return false
     end
 
     if input[0..0] == '!'
       RVC::Util.system_fg input[1..-1]
-      return
+      return false
     end
 
     ruby = @persist_ruby
@@ -70,10 +71,13 @@ class Shell
           puts "#{$!.class}: #{$!.message}"
         end
       end
+      return false
     rescue Exception
       puts "#{$!.class}: #{$!.message}"
       puts $!.backtrace * "\n"
+      return false
     end
+    return true
   end
 
   def eval_command input

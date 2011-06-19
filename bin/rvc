@@ -54,9 +54,11 @@ EOS
   opt :create_directory, "Create the initial directory if it doesn't exist", :short => :none
   opt :cmd, "command to evaluate", :short => 'c', :multi => true, :type => :string
   opt :script, "file to execute", :short => 's', :type => :string
+  opt :batch, "batch mode, will return a code 1 if fail", :short => 'b', :type => :boolean
 end
 
-$interactive = $opts[:script].nil? and $stdin.tty?
+$batch = $opts[:batch]
+$interactive = ($opts[:script].nil? and $stdin.tty?) && !$opts[:batch]
 
 RVC.reload_modules false
 
@@ -66,7 +68,7 @@ else
   RVC::MemorySession.new
 end
 
-$shell = RVC::Shell.new session
+$shell = RVC::Shell.new session, $batch
 
 # Prompt for hostname if none given. Useful on win32.
 if $shell.session.connections.empty? and ARGV.empty? and $interactive
@@ -135,13 +137,14 @@ end
 if $opts[:script]
   $shell.eval_ruby File.read($opts[:script]), $opts[:script]
 else
-  while true
+  while (!$batch || $opts[:cmd].size > 0)
     begin
       input = $opts[:cmd].shift || Readline.readline($shell.prompt, false) or break
       input = input.strip
       next if input.empty?
-      (history.puts input; Readline::HISTORY << input) unless input == Readline::HISTORY.to_a[-1]
-      $shell.eval_input input
+      (history.puts input; Readline::HISTORY << input) unless $batch || input == Readline::HISTORY.to_a[-1]
+      res = $shell.eval_input input
+      Kernel.exit(1) if $batch && !res
     rescue Interrupt
       puts
     end

@@ -120,7 +120,11 @@ module Util
             $stdout.write "\e[K#{text}#{progress_bar}\n"
           elsif state == 'error'
             error = props['info.error']
-            $stdout.write "\e[K#{name} #{entityName}: #{error.fault.class.wsdl_name}: #{error.localizedMessage}\n"
+            if $shell.raise_exception_on_task_error
+              raise error
+            else
+              $stdout.write "\e[K#{name} #{entityName}: #{error.fault.class.wsdl_name}: #{error.localizedMessage}\n"
+            end
           else
             $stdout.write "\e[K#{name} #{entityName}: #{state}\n"
           end
