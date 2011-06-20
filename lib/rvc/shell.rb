@@ -21,17 +21,16 @@
 module RVC
 
 class Shell
-  attr_reader :fs, :connections, :session, :raise_exception_on_task_error
+  attr_reader :fs, :connections, :session
   attr_accessor :debug
 
-  def initialize session, raise_exception_on_task_error = false
+  def initialize session
     @session = session
     @persist_ruby = false
     @fs = RVC::FS.new RVC::RootNode.new
     @ruby_evaluator = RubyEvaluator.new @fs
     @connections = {}
     @debug = false
-    @raise_exception_on_task_error = raise_exception_on_task_error
   end
 
   def eval_input input
@@ -53,9 +52,9 @@ class Shell
 
     begin
       if ruby
-        eval_ruby input
+        return eval_ruby input
       else
-        eval_command input
+        return eval_command input
       end
     rescue SystemExit, IOError
       raise
@@ -77,7 +76,6 @@ class Shell
       puts $!.backtrace * "\n"
       return false
     end
-    return true
   end
 
   def eval_command input
@@ -114,7 +112,6 @@ class Shell
         m.send cmd.to_sym, *args
       end
     end
-    nil
   end
 
   def eval_ruby input, file="<input>"

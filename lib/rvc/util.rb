@@ -106,6 +106,7 @@ module Util
   def progress tasks
     interested = %w(info.progress info.state info.entityName info.error info.name)
     connection = single_connection tasks
+    error_count = 0
     connection.serviceInstance.wait_for_multiple_tasks interested, tasks do |h|
       if interactive?
         h.each do |task,props|
@@ -120,11 +121,8 @@ module Util
             $stdout.write "\e[K#{text}#{progress_bar}\n"
           elsif state == 'error'
             error = props['info.error']
-            if $shell.raise_exception_on_task_error
-              raise error
-            else
-              $stdout.write "\e[K#{name} #{entityName}: #{error.fault.class.wsdl_name}: #{error.localizedMessage}\n"
-            end
+            $stdout.write "\e[K#{name} #{entityName}: #{error.fault.class.wsdl_name}: #{error.localizedMessage}\n"
+            error_count += 1
           else
             $stdout.write "\e[K#{name} #{entityName}: #{state}\n"
           end
@@ -134,7 +132,7 @@ module Util
       end
     end
     $stdout.write "\e[#{tasks.size}B" if interactive?
-    true
+    error_count == 0
   end
 
   def terminal_columns

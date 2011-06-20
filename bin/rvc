@@ -68,7 +68,7 @@ else
   RVC::MemorySession.new
 end
 
-$shell = RVC::Shell.new session, $batch
+$shell = RVC::Shell.new session
 
 # Prompt for hostname if none given. Useful on win32.
 if $shell.session.connections.empty? and ARGV.empty? and $interactive
@@ -144,7 +144,7 @@ else
       next if input.empty?
       (history.puts input; Readline::HISTORY << input) unless $batch || input == Readline::HISTORY.to_a[-1]
       res = $shell.eval_input input
-      Kernel.exit(1) if $batch && !res
+      Kernel.exit(1) if $batch && res == false
     rescue Interrupt
       puts
     end
