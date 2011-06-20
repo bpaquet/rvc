@@ -92,7 +92,7 @@ def upload local_path, dest
     res = http.request(request)
     $stdout.puts
     case res
-    when Net::HTTPOK
+    when Net::HTTPSuccess
     else
       err "upload failed: #{res.message}"
     end
@@ -133,6 +133,23 @@ def mkdir datastore_path
   dc._connection.serviceContent.fileManager.MakeDirectory :name => name,
                                                           :datacenter => dc,
                                                           :createParentDirectories => false
+end
+
+
+opts :delete do
+  summary "Delete a directory or a file on a datastore"
+  arg 'path', "Directory to delete on the datastore"
+end
+
+def delete datastore_path
+  dir = lookup_single(datastore_path)
+  err "datastore file or directory does not exist" unless (dir.is_a? RbVmomi::VIM::Datastore::FakeDatastoreFolder) || (dir.is_a? RbVmomi::VIM::Datastore::FakeDatastoreFile)
+  ds = dir.datastore
+  dc = ds.path.find { |o,x| o.is_a? RbVmomi::VIM::Datacenter }[0]
+  name = "#{dir.datastore_path}"
+  task = dc._connection.serviceContent.fileManager.DeleteDatastoreFile_Task :name => name,
+                                                                            :datacenter => dc
+  progress [task]
 end
 
 
