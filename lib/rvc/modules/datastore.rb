@@ -60,11 +60,11 @@ def upload local_path, dest
   err "local file does not exist" unless File.exists? local_path
   real_datastore_path = "#{dir.path}/#{datastore_filename}"
 
-  http, headers = init_http dir
-  
-  File.open(local_path, 'rb') do |io|
-    stream = ProgressStream.new(io, io.stat.size) do |s|
-      $stdout.write "\e[0G\e[Kuploading #{s.count}/#{s.len} bytes (#{(s.count*100)/s.len}%)"
+              http, headers = init_http dir
+
+              File.open(local_path, 'rb') do |io|
+                stream = ProgressStream.new(io, io.stat.size) do |s|
+                  $stdout.write "\e[0G\e[Kuploading #{s.count}/#{s.len} bytes (#{(s.count*100)/s.len}%)"
       $stdout.flush
     end
 
@@ -84,6 +84,66 @@ def upload local_path, dest
     end
   end
 end
+
+opts :copy do
+  summary "Copy file (can be between two different hosts)"
+  arg 'datastore-from-path', "Source filename on the datastore", :lookup => VIM::Datastore::FakeDatastoreFile
+  arg 'datastore-to-path', "Destination filename on the datastore", :lookup_parent => VIM::Datastore::FakeDatastoreFolder
+end
+
+def copy from, dest
+  http_from, headers_from = init_http from
+  
+  path_from = http_path from.datastore.send(:datacenter).name, from.datastore.name, from.path
+  
+  dir, datastore_filename = *dest
+  real_datastore_path = "#{dir.path}/#{datastore_filename}"
+    
+  http_to, headers_to = init_http dir
+  path_to = http_path dir.datastore.send(:datacenter).name, dir.datastore.name, real_datastore_path
+    
+  http_from.request_get(path_from, headers_from) do |res|
+    case res
+    when Net::HTTPOK
+      len = res.content_length
+      rd, wr = IO.pipe
+      sender = fork do
+        wr.close
+        stream = ProgressStream.new(rd, len) do |s|
+          $stdout.write "\e[0G\e[Kcopying #{s.count}/#{s.len} bytes (#{(s.count*100)/s.len}%)"
+          $stdout.flush
+        end
+        
+        headers_to = headers_to.merge({
+          'content-length' => len.to_s,
+          'Content-Type' => 'application/octet-stream'
+        })
+        request = Net::HTTP::Put.new path_to, headers_to
+        request.body_stream = stream
+        res = http_to.request(request)
+        $stdout.puts
+        case res
+        when Net::HTTPSuccess
+        else
+          err "upload failed: #{res.message}"
+          exit 1
+        end
+      end
+      rd.close
+      res.read_body do |segment|
+        wr.write segment
+      end
+      wr.close
+      Process.waitpid(sender)
+      status = $?
+      err "wrong return code for upload sub process #{status.exitstatus}" if status.exitstatus != 0
+    else
+      err "download failed: #{res.message}"
+    end
+  end
+end
+
+
 
 class ProgressStream
   attr_reader :io, :len, :count
@@ -148,15 +208,33 @@ rvc_alias :edit, :vi
 
 def edit file
   editor = ENV['VISUAL'] || ENV['EDITOR'] || 'vi'
-  filename = File.join(Dir.tmpdir, "rvc.#{Time.now.to_i}.#{rand(65536)}")
-  download file, filename
-  begin
+  download_in_tmp_file file do |filename|
     pre_stat = File.stat filename
     system("#{editor} #{filename}")
     post_stat = File.stat filename
     if pre_stat != post_stat
       upload filename, [file.parent, File.basename(file.path)]
     end
+  end
+end
+
+opts :cat do
+  summary "Display a file"
+  arg "file", nil, :lookup => VIM::Datastore::FakeDatastoreFile
+end
+
+def cat file
+  download_in_tmp_file file do |filename|
+    puts File.read(filename)
+  end
+end
+
+
+def download_in_tmp_file file
+  filename = File.join(Dir.tmpdir, "rvc.#{Time.now.to_i}.#{rand(65536)}")
+  download file, filename
+  begin
+    yield filename
   ensure
     File.unlink filename
   end
@@ -179,4 +257,3 @@ def init_http file
   headers = { 'cookie' => file.datastore._connection.cookie }
   return http, headers
 end
-
