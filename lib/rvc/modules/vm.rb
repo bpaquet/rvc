@@ -107,6 +107,8 @@ opts :create do
   opt :disksize, "Size in KB of primary disk", :short => 's', :type => :int, :default => 4000000
   opt :memory, "Size in MB of memory", :short => 'm', :type => :int, :default => 128
   opt :cpucount, "Number of CPUs", :short => 'c', :type => :int, :default => 1
+  opt :network, "Network to connect to", :type => :string, :default => nil
+  opt :guest_id, "Guest Id", :short => 'g', :type => :string, :default => "otherGuest"
 end
 
 def create dest, opts
@@ -114,9 +116,10 @@ def create dest, opts
   err "must specify datastore (--datastore)" unless opts[:datastore]
   vmFolder, name = *dest
   datastore_path = "[#{opts[:datastore].name}]"
+  network = opts[:network] || get_default_network(vmFolder)
   config = {
     :name => name,
-    :guestId => 'otherGuest',
+    :guestId => opts[:guest_id],
     :files => { :vmPathName => datastore_path },
     :numCPUs => opts[:cpucount],
     :memoryMB => opts[:memory],
@@ -162,11 +165,11 @@ def create dest, opts
         :device => VIM.VirtualE1000(
           :key => -3,
           :deviceInfo => {
-            :label => 'Network Adapter 1',
-            :summary => 'VM Network'
+            :label => 'Network Adapter 0',
+            :summary => network
           },
           :backing => VIM.VirtualEthernetCardNetworkBackingInfo(
-            :deviceName => 'VM Network'
+            :deviceName => network
           ),
           :addressType => 'generated'
         )
@@ -459,15 +462,16 @@ opts :add_net_device do
   summary "Add a network adapter to a virtual machine"
   arg :vm, nil, :lookup => VIM::VirtualMachine
   opt :type, "Adapter type", :default => 'e1000'
-  opt :network, "Network to connect to", :default => 'VM Network'
+  opt :network, "Network to connect to", :default => nil
 end
 
 def add_net_device vm, opts
+  network = opts[:network] || get_default_network(vm)
   case opts[:type]
   when 'e1000'
-    _add_net_device vm, VIM::VirtualE1000, opts[:network]
+    _add_net_device vm, VIM::VirtualE1000, network
   when 'vmxnet3'
-    _add_net_device vm, VIM::VirtualVmxnet3, opts[:network]
+    _add_net_device vm, VIM::VirtualVmxnet3, network
   else err "unknown device"
   end
 end
@@ -479,7 +483,7 @@ def _add_device vm, dev
       { :operation => :add, :device => dev },
     ]
   }
-  vm.ReconfigVM_Task(:spec => spec).wait_for_completion
+  progress [vm.ReconfigVM_Task(:spec => spec)]
 end
 
 def _add_net_device vm, klass, network
@@ -511,7 +515,7 @@ def remove_device vm, label
       { :operation => :remove, :device => dev },
     ]
   }
-  vm.ReconfigVM_Task(:spec => spec).wait_for_completion
+  progress [vm.ReconfigVM_Task(:spec => spec)]
 end
 
 
@@ -643,4 +647,8 @@ def vm_ip vm
   else
     err "no IP known for this VM"
   end
+end
+
+def get_default_network object
+  object._connection.root.children.first[1].children["network"].children.keys[0]
 end
