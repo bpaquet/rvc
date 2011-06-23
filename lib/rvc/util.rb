@@ -134,6 +134,14 @@ module Util
     $stdout.write "\e[#{tasks.size}B" if interactive?
     error_count == 0
   end
+  
+  def progress_and_raise_if_error tasks
+    err "Task error" unless progress tasks
+  end
+  
+  def module_call module_sym, function_sym, *args
+    err "External module execution error" unless RVC::MODULES[module_sym.to_s].send function_sym, *args
+  end
 
   def terminal_columns
     begin

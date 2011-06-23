@@ -105,6 +105,7 @@ opts :create do
   opt :host, "Host", :short => 'h', :type => :string, :lookup => VIM::HostSystem
   opt :datastore, "Datastore", :short => 'd', :type => :string, :lookup => VIM::Datastore
   opt :disksize, "Size in KB of primary disk", :short => 's', :type => :int, :default => 4000000
+  opt :diskthin, "Disk is thin provisionned", :type => :boolean, :default => true
   opt :memory, "Size in MB of memory", :short => 'm', :type => :int, :default => 128
   opt :cpucount, "Number of CPUs", :short => 'c', :type => :int, :default => 1
   opt :network, "Network to connect to", :type => :string, :default => nil
@@ -139,7 +140,7 @@ def create dest, opts
           :backing => VIM.VirtualDiskFlatVer2BackingInfo(
             :fileName => datastore_path,
             :diskMode => :persistent,
-            :thinProvisioned => true
+            :thinProvisioned => opts[:diskthin]
           ),
           :controllerKey => 1000,
           :unitNumber => 0,
@@ -157,7 +158,8 @@ def create dest, opts
           :backing => VIM.VirtualCdromIsoBackingInfo(
             :fileName => datastore_path
           ),
-          :controllerKey => 200,
+          # use 201 to use second ide channel
+          :controllerKey => 201,
           :unitNumber => 0
         )
       }, {
@@ -281,6 +283,7 @@ def devices vm
   devs.each do |dev|
     tags = []
     tags << (dev.connectable.connected ? :connected : :disconnected) if dev.props.member? :connectable
+    tags << (dev.backing.fileName) if dev.backing.is_a?(VIM::VirtualDeviceFileBackingInfo)
     puts "#{dev.deviceInfo.label} (#{dev.class}): #{dev.deviceInfo.summary}; #{tags * ' '}"
   end
 end
@@ -476,6 +479,51 @@ def add_net_device vm, opts
   end
 end
 
+opts :add_disk do
+  summary "Add a disk to a virtual machine"
+  arg :vm, nil, :lookup => VIM::VirtualMachine
+  opt :file, "Disk file", :default => nil, :lookup_parent => RbVmomi::VIM::Datastore::FakeDatastoreFolder
+  opt :type, "Disk type [lsiLogic, ide]", :default => "lsiLogic"
+  opt :disksize, "Size in KB of disk", :short => 's', :type => :int, :default => 4000000
+  opt :diskthin, "Disk is thin provisionned", :type => :boolean, :default => true
+end
+
+def add_disk vm, opts
+  unit_number = (vm.config.hardware.device.grep(VIM::VirtualDisk).map{|disk| disk[:unitNumber]}.max || -1) + 1
+  datastore_path = opts[:file]
+  unless datastore_path
+    path = vm.config.files.vmPathName
+    # strip ".vmx"
+    path = path[0..-5]
+    datastore_path = "#{path}#{unit_number}.vmdk"
+  end
+  disk_type = opts[:type].to_sym
+  controller_key = case disk_type
+  when :lsiLogic then 1000
+  when :ide then 200
+  else
+    err "Unknown disk type #{disk_type}"
+  end
+  progress_and_raise_if_error [vm._connection.serviceContent.virtualDiskManager.CreateVirtualDisk_Task(
+    :name => datastore_path,
+    :spec => VIM.FileBackedVirtualDiskSpec(
+      :diskType => :opts[:diskthin] ? :thin : :thick,
+      :adapterType => disk_type,
+      :capacityKb => opts[:disksize]
+    )
+  )]
+  _add_device vm, VIM.VirtualDisk(
+    :key => -1,
+    :backing => VIM.VirtualDiskFlatVer2BackingInfo(
+      :fileName => datastore_path,
+      :diskMode => :persistent,
+      :thinProvisioned => opts[:diskthin]
+    ),
+    :controllerKey => controller_key,
+    :unitNumber => unit_number,
+    :capacityInKB => opts[:disksize]
+  )
+end
 
 def _add_device vm, dev
   spec = {
@@ -500,6 +548,20 @@ def _add_net_device vm, klass, network
   )
 end
 
+opts :remove_disk do
+  summary "Detach disk from vm and remove file"
+  arg :vm, nil, :lookup => VIM::VirtualMachine
+  arg :label, "Disk label"
+end
+
+def remove_disk vm, label
+  remove_device vm, label do |dev|
+    progress [vm._connection.serviceContent.virtualDiskManager.DeleteVirtualDisk_Task(
+      :name => dev.backing.fileName
+    )] if dev.backing.respond_to? :fileName
+  end
+end
+
 
 opts :remove_device do
   summary "Remove a virtual device"
@@ -515,7 +577,8 @@ def remove_device vm, label
       { :operation => :remove, :device => dev },
     ]
   }
-  progress [vm.ReconfigVM_Task(:spec => spec)]
+  progress_and_raise_if_error [vm.ReconfigVM_Task(:spec => spec)]
+  yield dev if block_given?
 end
 
 
