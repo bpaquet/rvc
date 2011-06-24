@@ -97,6 +97,21 @@ def reboot_guest vms
   vms.each(&:RebootGuest)
 end
 
+opts :reconfigure_vm do
+  summary "Reconfigure some parameter in a new VM"
+  arg :vm, "VM", :lookup => VIM::VirtualMachine
+  opt :memory, "Size in MB of memory", :short => 'm', :type => :int, :default => nil
+  opt :cpucount, "Number of CPUs", :short => 'c', :type => :int, :default => nil
+  opt :guestid, "Guest Id", :short => 'g', :type => :string, :default => nil
+end
+
+def reconfigure_vm vm, opts
+  progress [vm.ReconfigVM_Task(:spec => {
+      :memoryMB => opts[:memory],
+      :numCPUs => opts[:cpucount],
+      :guestId => opts[:guestid],
+    })]
+end
 
 opts :create do
   summary "Create a new VM"
@@ -109,7 +124,7 @@ opts :create do
   opt :memory, "Size in MB of memory", :short => 'm', :type => :int, :default => 128
   opt :cpucount, "Number of CPUs", :short => 'c', :type => :int, :default => 1
   opt :network, "Network to connect to", :type => :string, :default => nil
-  opt :guest_id, "Guest Id", :short => 'g', :type => :string, :default => "otherGuest"
+  opt :guestid, "Guest Id", :short => 'g', :type => :string, :default => "otherGuest"
 end
 
 def create dest, opts
@@ -120,7 +135,7 @@ def create dest, opts
   network = opts[:network] || get_default_network(vmFolder)
   config = {
     :name => name,
-    :guestId => opts[:guest_id],
+    :guestId => opts[:guestid],
     :files => { :vmPathName => datastore_path },
     :numCPUs => opts[:cpucount],
     :memoryMB => opts[:memory],
