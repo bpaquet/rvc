@@ -58,7 +58,7 @@ EOS
 end
 
 $batch = $opts[:batch]
-$interactive = ($opts[:script].nil? and $stdin.tty?) && !$opts[:batch]
+$interactive = $opts[:script].nil? && $stdin.tty? && !$opts[:batch]
 
 RVC.reload_modules false
 
