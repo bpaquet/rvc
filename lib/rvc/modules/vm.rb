@@ -486,23 +486,32 @@ opts :add_disk do
   opt :type, "Disk type [lsiLogic, ide]", :default => "lsiLogic"
   opt :disksize, "Size in KB of disk", :short => 's', :type => :int, :default => 4000000
   opt :diskthin, "Disk is thin provisionned", :type => :boolean, :default => true
+  opt :unit_number, "Disk unit number", :type => :int, :default => nil
 end
 
 def add_disk vm, opts
-  unit_number = (vm.config.hardware.device.grep(VIM::VirtualDisk).map{|disk| disk[:unitNumber]}.max || -1) + 1
-  datastore_path = opts[:file]
-  unless datastore_path
-    path = vm.config.files.vmPathName
-    # strip ".vmx"
-    path = path[0..-5]
-    datastore_path = "#{path}#{unit_number}.vmdk"
-  end
   disk_type = opts[:type].to_sym
   controller_key = case disk_type
   when :lsiLogic then 1000
   when :ide then 200
   else
     err "Unknown disk type #{disk_type}"
+  end
+  unless opts[:unit_number]
+    used = []
+    vm.config.hardware.device.each do |device|
+      used << device.unitNumber if device.controllerKey == controller_key
+    end
+    opts[:unit_number] = 0
+    opts[:unit_number] += 1 while used.index(opts[:unit_number])
+  end
+  p opts[:unit_number]
+  datastore_path = opts[:file]
+  unless datastore_path
+    path = vm.config.files.vmPathName
+    # strip ".vmx"
+    path = path[0..-5]
+    datastore_path = "#{path}#{opts[:unit_number]}.vmdk"
   end
   progress_and_raise_if_error [vm._connection.serviceContent.virtualDiskManager.CreateVirtualDisk_Task(
     :name => datastore_path,
@@ -520,7 +529,7 @@ def add_disk vm, opts
       :thinProvisioned => opts[:diskthin]
     ),
     :controllerKey => controller_key,
-    :unitNumber => unit_number,
+    :unitNumber => opts[:unit_number],
     :capacityInKB => opts[:disksize]
   )
 end
