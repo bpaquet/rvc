@@ -87,7 +87,7 @@ $shell.session.connections.each do |key|
   end
 end
 
-ARGV.each do |uri|
+ARGV.uniq.each do |uri|
   begin
     puts "Connecting to #{uri}..." if (ARGV+$shell.session.connections).size > 1
     CMD.vim.connect uri, {}
