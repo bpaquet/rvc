@@ -108,27 +108,29 @@ module Util
     connection = single_connection tasks
     error_count = 0
     connection.serviceInstance.wait_for_multiple_tasks interested, tasks do |h|
-      if interactive?
-        h.each do |task,props|
-          state, entityName, name = props['info.state'], props['info.entityName'], props['info.name']
-          name = $` if name =~ /_Task$/
-          if state == 'running'
+      h.each do |task,props|
+        state, entityName, name = props['info.state'], props['info.entityName'], props['info.name']
+        name = $` if name =~ /_Task$/
+        if state == 'running'
+          if interactive?
             text = "#{name} #{entityName}: #{state} "
             progress = props['info.progress']
             barlen = terminal_columns - text.size - 2
             progresslen = ((progress||0)*barlen)/100
             progress_bar = "#{PROGRESS_BAR_LEFT}#{PROGRESS_BAR_MIDDLE * progresslen}#{' ' * (barlen-progresslen)}#{PROGRESS_BAR_RIGHT}"
             $stdout.write "\e[K#{text}#{progress_bar}\n"
-          elsif state == 'error'
-            error = props['info.error']
-            $stdout.write "\e[K#{name} #{entityName}: #{error.fault.class.wsdl_name}: #{error.localizedMessage}\n"
-            error_count += 1
-          else
-            $stdout.write "\e[K#{name} #{entityName}: #{state}\n"
           end
+        elsif state == 'error'
+          error = props['info.error']
+          $stdout.write "\e[K#{name} #{entityName}: #{error.fault.class.wsdl_name}: #{error.localizedMessage}\n"
+          error_count += 1
+        else
+          $stdout.write "\e[K#{name} #{entityName}: #{state}\n"
         end
+      end
+      if interactive?
         $stdout.write "\e[#{h.size}A"
-        $stdout.flush
+        $stdout.flush if interactive?
       end
     end
     $stdout.write "\e[#{tasks.size}B" if interactive?

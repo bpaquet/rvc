@@ -520,7 +520,6 @@ def add_disk vm, opts
     opts[:unit_number] = 0
     opts[:unit_number] += 1 while used.index(opts[:unit_number])
   end
-  p opts[:unit_number]
   datastore_path = opts[:file]
   unless datastore_path
     path = vm.config.files.vmPathName
