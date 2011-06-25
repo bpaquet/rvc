@@ -579,6 +579,7 @@ opts :remove_disk do
 end
 
 def remove_disk vm, label
+  puts "Removing disk #{label} from #{vm.name}"
   remove_device vm, label do |dev|
     progress [vm._connection.serviceContent.virtualDiskManager.DeleteVirtualDisk_Task(
       :name => dev.backing.fileName
