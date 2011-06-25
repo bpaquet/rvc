@@ -89,7 +89,7 @@ end
 
 ARGV.uniq.each do |uri|
   begin
-    puts "Connecting to #{uri}..." if (ARGV+$shell.session.connections).size > 1
+    puts "Connecting to #{uri.gsub(/:.*@/, ':xxxx@')}..." if (ARGV+$shell.session.connections).size > 1
     CMD.vim.connect uri, {}
   rescue RVC::Util::UserError
     puts "Failed to connect to #{uri}: #{$!.message}"
