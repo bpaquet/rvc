@@ -128,6 +128,8 @@ def copy_vm_path src_object, from_file, dest_object, dest_file
     wr.close
     Process.waitpid(sender)
     status = $?
+    # ssl stack seem to be in a strange state
+    [src_object._connection, dest_object._connection].uniq.map{|conn| conn.restart_http}
     err "wrong return code for upload sub process #{status.exitstatus}" if status.exitstatus != 0
   end
 end
