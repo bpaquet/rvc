@@ -77,8 +77,8 @@ def upload_vm_path local_path, object, remote_path
   ds_name, path = parse_file_url remote_path
 
   File.open(local_path, 'rb') do |io|
-    stream = ProgressStream.new(io, io.stat.size) do |s|
-      $stdout.write "\e[0G\e[Kuploading #{s.count}/#{s.len} bytes (#{(s.count*100)/s.len}%)"
+    stream = ProgressStream.new(io, io.stat.size) do |count, len|
+      $stdout.write "\e[0G\e[Kuploading #{count}/#{len} bytes (#{(count*100)/len}%)"
       $stdout.flush
     end
     _upload object, stream, io.stat.size, ds_name, path
@@ -114,8 +114,8 @@ def copy_vm_path src_object, from_file, dest_object, dest_file
     rd, wr = IO.pipe
     sender = fork do
       wr.close
-      stream = ProgressStream.new(rd, len) do |s|
-        $stdout.write "\e[0G\e[Kcopying #{s.count}/#{s.len} bytes (#{(s.count*100)/s.len}%)"
+      stream = ProgressStream.new(rd, len) do |count, len|
+        $stdout.write "\e[0G\e[Kcopying #{count}/#{len} bytes (#{(count*100)/len}%)"
         $stdout.flush
       end
       
@@ -135,19 +135,22 @@ def copy_vm_path src_object, from_file, dest_object, dest_file
 end
 
 class ProgressStream
-  attr_reader :io, :len, :count
+  attr_reader :io
 
   def initialize io, len, &b
     @io = io
     @len = len
     @count = 0
     @cb = b
+    @last = -1
   end
 
   def read n
     io.read(n).tap do |c|
       @count += c.length if c
-      @cb[self]
+      new_last = (@count * 200 / @len).floor
+      @cb.call @count, @len if (new_last != @last) || (@count == @len) || (@count == 0)
+      @last = new_last
     end
   end
 end
