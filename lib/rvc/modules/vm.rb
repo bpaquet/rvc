@@ -198,6 +198,23 @@ def create dest, opts
                          :host => opts[:host]).wait_for_completion
 end
 
+opts :mount_vmware_tools do
+  summary "Mount vmware tools CD in vm CDROM drive"
+  arg :vm, nil, :lookup => VIM::VirtualMachine
+end
+
+def mount_vmware_tools vm
+  vm.MountToolsInstaller
+end
+
+opts :umount_vmware_tools do
+  summary "Umount vmware tools CD in vm CDROM drive"
+  arg :vm, nil, :lookup => VIM::VirtualMachine
+end
+
+def umount_vmware_tools vm
+  vm.UnmountToolsInstaller
+end
 
 opts :insert_cdrom do
   summary "Put a disc in a virtual CDROM drive"
