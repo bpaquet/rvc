@@ -1,15 +1,15 @@
 # Copyright (c) 2011 VMware, Inc.  All Rights Reserved.
-# 
+#
 # Permission is hereby granted, free of charge, to any person obtaining a copy
 # of this software and associated documentation files (the "Software"), to deal
 # in the Software without restriction, including without limitation the rights
 # to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
 # copies of the Software, and to permit persons to whom the Software is
 # furnished to do so, subject to the following conditions:
-# 
+#
 # The above copyright notice and this permission notice shall be included in
 # all copies or substantial portions of the Software.
-# 
+#
 # THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
 # IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
 # FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
@@ -18,132 +18,119 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 # THE SOFTWARE.
 
+opts :download_vm_path do
+  summary "Download a file from a datastore, specifying it with [datastoreName] /path_to_file/file.name"
+  arg :object, "Some rvc object to identify connection", :lookup => RbVmomi::BasicTypes::Base
+  arg :remote_path, "Filename to download"
+  arg :local_path, "Filename on the local machine"
+end
+
+def download_vm_path object, remote_path, local_path
+  ds_name, path = parse_file_url remote_path
+  _download object, ds_name, path do |res|
+    len = res.content_length
+    count = 0
+    File.open(local_path, 'wb') do |io|
+      res.read_body do |segment|
+        count += segment.length
+        io.write segment
+        $stdout.write "\e[0G\e[Kdownloading #{count}/#{len} bytes (#{(count*100)/len}%)"
+        $stdout.flush
+      end
+    end
+    $stdout.puts
+  end 
+end
+
 opts :download do
   summary "Download a file from a datastore"
-  arg 'datastore-path', "Filename on the datastore", :lookup => VIM::Datastore::FakeDatastoreFile
-  arg 'local-path', "Filename on the local machine"
+  arg :datastore_path, "Filename on the datastore", :lookup => VIM::Datastore::FakeDatastoreFile
+  arg :local_path, "Filename on the local machine"
 end
 
 def download file, local_path
-  http, headers = init_http file
-  
-  path = http_path file.datastore.send(:datacenter).name, file.datastore.name, file.path
-  http.request_get(path, headers) do |res|
-    case res
-    when Net::HTTPOK
-      len = res.content_length
-      count = 0
-      File.open(local_path, 'wb') do |io|
-        res.read_body do |segment|
-          count += segment.length
-          io.write segment
-          $stdout.write "\e[0G\e[Kdownloading #{count}/#{len} bytes (#{(count*100)/len}%)"
-          $stdout.flush
-        end
-      end
-      $stdout.puts
-    else
-      err "download failed: #{res.message}"
-    end
-  end
+  download_vm_path file.datastore, format_url(file), local_path
 end
-
 
 opts :upload do
   summary "Upload a file to a datastore"
-  arg 'local-path', "Filename on the local machine"
-  arg 'datastore-path', "Filename on the datastore", :lookup_parent => VIM::Datastore::FakeDatastoreFolder
+  arg :local_path, "Filename on the local machine"
+  arg :datastore_path, "Filename on the datastore", :lookup_parent => VIM::Datastore::FakeDatastoreFolder
 end
 
 def upload local_path, dest
-  dir, datastore_filename = *dest
+  vmFolder, name = *dest
+  path = "#{format_url(vmFolder)}/#{name}"
+  upload_vm_path local_path, vmFolder.datastore, path
+end
+
+opts :upload_vm_path do
+  summary "Upload a file from a datastore, specifying it with [datastoreName] /path_to_file/file.name"
+  arg :local_path, "Filename on the local machine"
+  arg :object, "Some rvc object to identify connection", :lookup => RbVmomi::BasicTypes::Base
+  arg :remote_path, "Filename on remote machine"
+end
+
+def upload_vm_path local_path, object, remote_path
   err "local file does not exist" unless File.exists? local_path
-  real_datastore_path = "#{dir.path}/#{datastore_filename}"
 
-              http, headers = init_http dir
+  ds_name, path = parse_file_url remote_path
 
-              File.open(local_path, 'rb') do |io|
-                stream = ProgressStream.new(io, io.stat.size) do |s|
-                  $stdout.write "\e[0G\e[Kuploading #{s.count}/#{s.len} bytes (#{(s.count*100)/s.len}%)"
+  File.open(local_path, 'rb') do |io|
+    stream = ProgressStream.new(io, io.stat.size) do |s|
+      $stdout.write "\e[0G\e[Kuploading #{s.count}/#{s.len} bytes (#{(s.count*100)/s.len}%)"
       $stdout.flush
     end
-
-    headers = headers.merge({
-      'content-length' => io.stat.size.to_s,
-      'Content-Type' => 'application/octet-stream'
-    })
-    path = http_path dir.datastore.send(:datacenter).name, dir.datastore.name, real_datastore_path
-    request = Net::HTTP::Put.new path, headers
-    request.body_stream = stream
-    res = http.request(request)
-    $stdout.puts
-    case res
-    when Net::HTTPSuccess
-    else
-      err "upload failed: #{res.message}"
-    end
+    _upload object, stream, io.stat.size, ds_name, path
   end
 end
 
 opts :copy do
   summary "Copy file (can be between two different hosts)"
-  arg 'datastore-from-path', "Source filename on the datastore", :lookup => VIM::Datastore::FakeDatastoreFile
-  arg 'datastore-to-path', "Destination filename on the datastore", :lookup_parent => VIM::Datastore::FakeDatastoreFolder
+  arg :src_path, "Source filename on the datastore", :lookup => VIM::Datastore::FakeDatastoreFile
+  arg :dest_path, "Destination filename on the datastore", :lookup_parent => VIM::Datastore::FakeDatastoreFolder
 end
 
-def copy from, dest
-  http_from, headers_from = init_http from
+def copy src_path, dest_path
+  vmFolder, name = *dest_path
+  path = "#{format_url(vmFolder)}/#{name}"
+  copy_vm_path src_path.datastore, format_url(src_path), vmFolder.datastore, path
+end
+
+opts :copy_vm_path do
+  summary "Copy file (can be between two different hosts), specifying it with [datastoreName] /path_to_file/file.name"
+  arg :src_object, "Some rvc object to identify source connection", :lookup => RbVmomi::BasicTypes::Base
+  arg :src_path, "Source filename"
+  arg :dest_object, "Some rvc object to identify destination connection", :lookup => RbVmomi::BasicTypes::Base
+  arg :dest_path, "Source filename"
+end
+
+def copy_vm_path src_object, from_file, dest_object, dest_file
+  from_ds_name, from_path = parse_file_url from_file
+  dest_ds_name, dest_path = parse_file_url dest_file
   
-  path_from = http_path from.datastore.send(:datacenter).name, from.datastore.name, from.path
-  
-  dir, datastore_filename = *dest
-  real_datastore_path = "#{dir.path}/#{datastore_filename}"
-    
-  http_to, headers_to = init_http dir
-  path_to = http_path dir.datastore.send(:datacenter).name, dir.datastore.name, real_datastore_path
-    
-  http_from.request_get(path_from, headers_from) do |res|
-    case res
-    when Net::HTTPOK
-      len = res.content_length
-      rd, wr = IO.pipe
-      sender = fork do
-        wr.close
-        stream = ProgressStream.new(rd, len) do |s|
-          $stdout.write "\e[0G\e[Kcopying #{s.count}/#{s.len} bytes (#{(s.count*100)/s.len}%)"
-          $stdout.flush
-        end
-        
-        headers_to = headers_to.merge({
-          'content-length' => len.to_s,
-          'Content-Type' => 'application/octet-stream'
-        })
-        request = Net::HTTP::Put.new path_to, headers_to
-        request.body_stream = stream
-        res = http_to.request(request)
-        $stdout.puts
-        case res
-        when Net::HTTPSuccess
-        else
-          err "upload failed: #{res.message}"
-          exit 1
-        end
-      end
-      rd.close
-      res.read_body do |segment|
-        wr.write segment
-      end
+  _download src_object, from_ds_name, from_path do |res|
+    len = res.content_length
+    rd, wr = IO.pipe
+    sender = fork do
       wr.close
-      Process.waitpid(sender)
-      status = $?
-      err "wrong return code for upload sub process #{status.exitstatus}" if status.exitstatus != 0
-    else
-      err "download failed: #{res.message}"
+      stream = ProgressStream.new(rd, len) do |s|
+        $stdout.write "\e[0G\e[Kcopying #{s.count}/#{s.len} bytes (#{(s.count*100)/s.len}%)"
+        $stdout.flush
+      end
+      
+      _upload dest_object, stream, len, dest_ds_name, dest_path
     end
+    rd.close
+    res.read_body do |segment|
+      wr.write segment
+    end
+    wr.close
+    Process.waitpid(sender)
+    status = $?
+    err "wrong return code for upload sub process #{status.exitstatus}" if status.exitstatus != 0
   end
 end
-
-
 
 class ProgressStream
   attr_reader :io, :len, :count
@@ -166,35 +153,46 @@ end
 
 opts :mkdir do
   summary "Create a directory on a datastore"
-  arg 'path', "Directory to create on the datastore"
+  arg :path, "Directory to create on the datastore", :lookup_parent => VIM::Datastore::FakeDatastoreFolder
 end
 
-def mkdir datastore_path
-  datastore_dir_path = File.dirname datastore_path
-  dir = lookup_single(datastore_dir_path)
-  err "datastore directory does not exist" unless dir.is_a? RbVmomi::VIM::Datastore::FakeDatastoreFolder
-  ds = dir.datastore
-  dc = ds.path.find { |o,x| o.is_a? RbVmomi::VIM::Datacenter }[0]
-  name = "#{dir.datastore_path}/#{File.basename(datastore_path)}"
-  dc._connection.serviceContent.fileManager.MakeDirectory :name => name,
-                                                          :datacenter => dc,
-                                                          :createParentDirectories => false
+def mkdir path
+  vmFolder, name = *path
+  mkdir_vm_path vmFolder.datastore, "#{format_url(vmFolder)}/#{name}"
 end
 
+opts :mkdir_vm_path do
+  summary "Create a directory on a datastore, specifying it with [datastoreName] /path_to_file/file.name"
+  arg :object, "Some rvc object to identify destination connection", :lookup => RbVmomi::BasicTypes::Base
+  arg :path, "Path to create"
+end
+
+def mkdir_vm_path object, path
+  object._connection.serviceContent.fileManager.MakeDirectory :name => path,
+                                                              :datacenter => find_dc(object),
+                                                              :createParentDirectories => false
+end
 
 opts :delete do
   summary "Delete a directory or a file on a datastore"
-  arg 'path', "Directory to delete on the datastore"
+  arg :path, "Directory to delete on the datastore"
 end
 
-def delete datastore_path
-  dir = lookup_single(datastore_path)
-  err "datastore file or directory does not exist" unless (dir.is_a? RbVmomi::VIM::Datastore::FakeDatastoreFolder) || (dir.is_a? RbVmomi::VIM::Datastore::FakeDatastoreFile)
-  ds = dir.datastore
-  dc = ds.path.find { |o,x| o.is_a? RbVmomi::VIM::Datacenter }[0]
-  name = "#{dir.datastore_path}"
-  task = dc._connection.serviceContent.fileManager.DeleteDatastoreFile_Task :name => name,
-                                                                            :datacenter => dc
+def delete path
+  f = lookup_single(path)
+  err "datastore file or directory does not exist" unless (f.is_a? RbVmomi::VIM::Datastore::FakeDatastoreFolder) || (f.is_a? RbVmomi::VIM::Datastore::FakeDatastoreFile)
+  delete_vm_path f.datastore, format_url(f)
+end
+
+opts :delete_vm_path do
+  summary "Delete a directory or a file on a datastore, specifying it with [datastoreName] /path_to_file/file.name"
+  arg :object, "Some rvc object to identify destination connection", :lookup => RbVmomi::BasicTypes::Base
+  arg :path, "Path to delete"
+end
+
+def delete_vm_path object, path
+  task = object._connection.serviceContent.fileManager.DeleteDatastoreFile_Task :name => path,
+                                                                                :datacenter => find_dc(object)
   progress [task]
 end
 
@@ -204,16 +202,26 @@ opts :edit do
   arg "file", nil, :lookup => VIM::Datastore::FakeDatastoreFile
 end
 
+def edit file
+  edit_vm_path file.datastore, format_url(file)
+end
+
 rvc_alias :edit, :vi
 
-def edit file
+opts :edit_vm_path do
+  summary "Edit a file, specifying it with [datastoreName] /path_to_file/file.name"
+  arg :object, "Some rvc object to identify connection", :lookup => RbVmomi::BasicTypes::Base
+  arg :file, nil
+end
+
+def edit_vm_path object, file
   editor = ENV['VISUAL'] || ENV['EDITOR'] || 'vi'
-  download_in_tmp_file file do |filename|
+  download_in_tmp_file object, file do |filename|
     pre_stat = File.stat filename
     system("#{editor} #{filename}")
     post_stat = File.stat filename
     if pre_stat != post_stat
-      upload filename, [file.parent, File.basename(file.path)]
+      upload_vm_path filename, object, file
     end
   end
 end
@@ -224,15 +232,24 @@ opts :cat do
 end
 
 def cat file
-  download_in_tmp_file file do |filename|
+  cat_vm_path file.datastore, format_url(file)
+end
+
+opts :cat_vm_path do
+  summary "Display a file, specifying it with [datastoreName] /path_to_file/file.name"
+  arg :object, "Some rvc object to identify connection", :lookup => RbVmomi::BasicTypes::Base
+  arg :file, nil
+end
+
+def cat_vm_path object, file
+  download_in_tmp_file object, file do |filename|
     puts File.read(filename)
   end
 end
 
-
-def download_in_tmp_file file
+def download_in_tmp_file object, file
   filename = File.join(Dir.tmpdir, "rvc.#{Time.now.to_i}.#{rand(65536)}")
-  download file, filename
+  download_vm_path object, file, filename
   begin
     yield filename
   ensure
@@ -240,13 +257,12 @@ def download_in_tmp_file file
   end
 end
 
-
 def http_path dc_name, ds_name, path
   "/folder/#{URI.escape path}?dcPath=#{URI.escape dc_name}&dsName=#{URI.escape ds_name}"
 end
 
-def init_http file
-  main_http = file.datastore._connection.http
+def init_http object
+  main_http = object._connection.http
   http = Net::HTTP.new(main_http.address, main_http.port)
   http.use_ssl = true
   http.verify_mode = OpenSSL::SSL::VERIFY_NONE
@@ -254,6 +270,59 @@ def init_http file
   http.start
   err "certificate mismatch" unless main_http.peer_cert.to_der == http.peer_cert.to_der
 
-  headers = { 'cookie' => file.datastore._connection.cookie }
+  headers = { 'cookie' => object._connection.cookie }
   return http, headers
+end
+
+def parse_file_url url
+  if url =~ /\[(.*)\] (.*)/
+     return $1, $2
+   else
+     err "Unable to parse remote path #{remote_path}"
+   end
+end
+
+def find_dc object
+  dc = object
+  while !dc.is_a? RbVmomi::VIM::Datacenter
+    dc = dc.parent
+  end
+  dc
+end
+
+def format_url file
+  "[#{file.datastore.name}] #{file.path}"
+end
+
+def _download object, ds_name, path
+  http, headers = init_http object
+  dc = find_dc object
+  path = http_path dc.name, ds_name, path
+  http.request_get(path, headers) do |res|
+    case res
+    when Net::HTTPOK
+      yield res
+    else
+      err "download failed: #{res.message}"
+    end
+  end
+end
+
+def _upload object, stream, len, ds_name, path
+  http, headers = init_http object
+  dc = find_dc object
+  headers = headers.merge({
+    'content-length' => len.to_s,
+    'Content-Type' => 'application/octet-stream'
+  })
+  path = http_path dc.name, ds_name, path
+  request = Net::HTTP::Put.new path, headers
+  request.body_stream = stream
+  res = http.request(request)
+  $stdout.puts
+  case res
+  when Net::HTTPSuccess
+  else
+    err "upload failed: #{res.message}"
+  end
 end
