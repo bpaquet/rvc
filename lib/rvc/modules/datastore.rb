@@ -176,6 +176,7 @@ def mkdir_vm_path object, path
   object._connection.serviceContent.fileManager.MakeDirectory :name => path,
                                                               :datacenter => find_dc(object),
                                                               :createParentDirectories => false
+  true
 end
 
 opts :delete do
