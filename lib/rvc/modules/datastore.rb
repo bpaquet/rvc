@@ -149,7 +149,7 @@ class ProgressStream
     io.read(n).tap do |c|
       @count += c.length if c
       new_last = (@count * 200 / @len).floor
-      @cb.call @count, @len if (new_last != @last) || (@count == @len) || (@count == 0)
+      @cb.call @count, @len if (new_last != @last) || (@count == @len)
       @last = new_last
     end
   end
