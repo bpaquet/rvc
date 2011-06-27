@@ -108,30 +108,40 @@ end
 def copy_vm_path src_object, from_file, dest_object, dest_file
   from_ds_name, from_path = parse_file_url from_file
   dest_ds_name, dest_path = parse_file_url dest_file
+
+  r, w = IO.pipe
+  sender = fork do
+    w.close
+    
+    dest_object._connection.restart_http
+    
+    len = r.read(10).to_i
+    
+    stream = ProgressStream.new(r, len) do |count, len|
+      $stdout.write "\e[0G\e[Kcopying #{count}/#{len} bytes (#{(count*100)/len}%)"
+      $stdout.flush
+    end
+    
+    _upload dest_object, stream, len, dest_ds_name, dest_path
+    r.close
+  end
+  r.close
   
   _download src_object, from_ds_name, from_path do |res|
     len = res.content_length
-    rd, wr = IO.pipe
-    sender = fork do
-      wr.close
-      stream = ProgressStream.new(rd, len) do |count, len|
-        $stdout.write "\e[0G\e[Kcopying #{count}/#{len} bytes (#{(count*100)/len}%)"
-        $stdout.flush
-      end
-      
-      _upload dest_object, stream, len, dest_ds_name, dest_path
-    end
-    rd.close
+    w.write sprintf("%10i", len)
     res.read_body do |segment|
-      wr.write segment
+      w.write segment
     end
-    wr.close
-    Process.waitpid(sender)
-    status = $?
-    # ssl stack seem to be in a strange state
-    [src_object._connection, dest_object._connection].uniq.map{|conn| conn.restart_http}
-    err "wrong return code for upload sub process #{status.exitstatus}" if status.exitstatus != 0
   end
+  
+  w.close
+  
+  Process.waitpid(sender)
+  status = $?
+  [src_object._connection, dest_object._connection].uniq.map{|conn| conn.restart_http}
+  err "wrong return code for upload sub process #{status.exitstatus}" if status.exitstatus != 0
+  true
 end
 
 class ProgressStream

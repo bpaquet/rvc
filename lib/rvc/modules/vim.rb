@@ -42,6 +42,8 @@ end
 
 rvc_alias :connect
 
+$global_http_lock = Mutex.new
+
 def connect uri, opts
   match = URI_REGEX.match uri
   Trollop.die "invalid hostname" unless match
@@ -62,6 +64,7 @@ def connect uri, opts
                              :rev => (opts[:rev]||'4.0'),
                              :ssl => true,
                              :insecure => bad_cert
+      vim.lock= $global_http_lock
       break
     rescue OpenSSL::SSL::SSLError
       # We'll check known_hosts next
@@ -116,7 +119,13 @@ def connect uri, opts
   Thread.new do
     while true
       sleep 600
-      vim.serviceInstance.CurrentTime
+      # Allow one reconnection, if socket has been long time by transfer on other hosts
+      begin
+        vim.serviceInstance.CurrentTime
+      rescue Exception
+        vim._connection.restart_http
+        vim.serviceInstance.CurrentTime
+      end
     end
   end
 
@@ -194,6 +203,7 @@ def check_known_hosts host, peer_public_key
 end
 
 class RbVmomi::VIM
+  
   def display_info
     puts serviceContent.about.fullName
   end
@@ -214,6 +224,10 @@ class RbVmomi::VIM
         raise
       end
     end
+  end
+  
+  def lock= mutex
+    @lock = mutex
   end
   
 end
