@@ -267,19 +267,6 @@ def http_path dc_name, ds_name, path
   "/folder/#{URI.escape path}?dcPath=#{URI.escape dc_name}&dsName=#{URI.escape ds_name}"
 end
 
-def init_http object
-  main_http = object._connection.http
-  http = Net::HTTP.new(main_http.address, main_http.port)
-  http.use_ssl = true
-  http.verify_mode = OpenSSL::SSL::VERIFY_NONE
-  #http.set_debug_output $stderr
-  http.start
-  err "certificate mismatch" unless main_http.peer_cert.to_der == http.peer_cert.to_der
-
-  headers = { 'cookie' => object._connection.cookie }
-  return http, headers
-end
-
 def parse_file_url url
   if url =~ /\[(.*)\] (.*)/
      return $1, $2
@@ -301,10 +288,10 @@ def format_url file
 end
 
 def _download object, ds_name, path
-  http, headers = init_http object
   dc = find_dc object
   path = http_path dc.name, ds_name, path
-  http.request_get(path, headers) do |res|
+  request = Net::HTTP::Get.new path
+  object._connection.http_request(request) do |res|
     case res
     when Net::HTTPOK
       yield res
@@ -315,20 +302,20 @@ def _download object, ds_name, path
 end
 
 def _upload object, stream, len, ds_name, path
-  http, headers = init_http object
   dc = find_dc object
-  headers = headers.merge({
+  headers = {
     'content-length' => len.to_s,
     'Content-Type' => 'application/octet-stream'
-  })
+  }
   path = http_path dc.name, ds_name, path
   request = Net::HTTP::Put.new path, headers
   request.body_stream = stream
-  res = http.request(request)
-  $stdout.puts
-  case res
-  when Net::HTTPSuccess
-  else
-    err "upload failed: #{res.message}"
+  object._connection.http_request(request) do |res|
+    $stdout.puts
+    case res
+    when Net::HTTPSuccess
+    else
+      err "upload failed: #{res.message}"
+    end
   end
 end

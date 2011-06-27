@@ -201,6 +201,21 @@ class RbVmomi::VIM
   def _connection
     self
   end
+  
+  def http_request request
+    @lock.synchronize do
+      request['Cookie'] = @cookie if @cookie
+      begin
+        @http.request(request) do |res|
+          yield res
+        end
+      rescue Exception
+        restart_http
+        raise
+      end
+    end
+  end
+  
 end
 
 
