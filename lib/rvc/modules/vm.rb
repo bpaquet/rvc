@@ -98,7 +98,7 @@ def reboot_guest vms
 end
 
 opts :reconfigure_vm do
-  summary "Reconfigure some parameter in a new VM"
+  summary "Reconfigure some parameters in a new VM"
   arg :vm, "VM", :lookup => VIM::VirtualMachine
   opt :memory, "Size in MB of memory", :short => 'm', :type => :int, :default => nil
   opt :cpucount, "Number of CPUs", :short => 'c', :type => :int, :default => nil

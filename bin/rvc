@@ -54,11 +54,11 @@ EOS
   opt :create_directory, "Create the initial directory if it doesn't exist", :short => :none
   opt :cmd, "command to evaluate", :short => 'c', :multi => true, :type => :string
   opt :script, "file to execute", :short => 's', :type => :string
-  opt :batch, "batch mode, will return a code 1 if fail", :short => 'b', :type => :boolean
+  opt :batch, "batch mode, will issue an exit code 1 if a command fail", :short => 'b', :type => :boolean
 end
 
 $batch = $opts[:batch]
-$interactive = $opts[:script].nil? && $stdin.tty? && !$opts[:batch]
+$interactive = $opts[:script].nil? && $stdin.tty? && !$batch
 
 RVC.reload_modules false
 
