@@ -1,0 +1,25 @@
+GEM
+  remote: http://rubygems.org/
+  specs:
+    backports (2.3.0)
+    builder (3.0.0)
+    ffi (1.0.9)
+    highline (1.6.2)
+    nokogiri (1.5.0)
+    rbvmomi (1.2.3)
+      builder
+      nokogiri (>= 1.4.1)
+      trollop
+    trollop (1.16.2)
+    zip (2.0.2)
+
+PLATFORMS
+  ruby
+
+DEPENDENCIES
+  backports
+  ffi
+  highline
+  rbvmomi
+  trollop
+  zip
