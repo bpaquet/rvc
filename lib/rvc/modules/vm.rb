@@ -125,6 +125,7 @@ opts :create do
   opt :cpucount, "Number of CPUs", :short => 'c', :type => :int, :default => 1
   opt :network, "Network to connect to", :type => :string, :default => nil
   opt :guestid, "Guest Id", :short => 'g', :type => :string, :default => "otherGuest"
+  opt :controller, "Disk controller type", :short => 't', :type => :string, :default => "VirtualLsiLogicController"
 end
 
 def create dest, opts
@@ -133,6 +134,19 @@ def create dest, opts
   vmFolder, name = *dest
   datastore_path = "[#{opts[:datastore].name}]"
   network = opts[:network] || get_default_network(vmFolder)
+  disk_controller_params = {
+    :key => 1000,
+    :busNumber => 0,
+    :sharedBus => :noSharing
+  }
+  disk_controller = case opts.controller
+  when "VirtualLsiLogicController"
+    VIM.VirtualLsiLogicController(disk_controller_params)
+  when "VirtualLsiLogicSASController"
+    VIM.VirtualLsiLogicSASController(disk_controller_params)
+  else 
+    err "Unknown controller disk type : #{opts.controller}"
+  end
   config = {
     :name => name,
     :guestId => opts[:guestid],
@@ -142,11 +156,7 @@ def create dest, opts
     :deviceChange => [
       {
         :operation => :add,
-        :device => VIM.VirtualLsiLogicController(
-          :key => 1000,
-          :busNumber => 0,
-          :sharedBus => :noSharing
-        )
+        :device => disk_controller,
       }, {
         :operation => :add,
         :fileOperation => :create,
@@ -547,7 +557,7 @@ def add_disk vm, opts
   progress_and_raise_if_error [vm._connection.serviceContent.virtualDiskManager.CreateVirtualDisk_Task(
     :name => datastore_path,
     :spec => VIM.FileBackedVirtualDiskSpec(
-      :diskType => :opts[:diskthin] ? :thin : :thick,
+      :diskType => opts[:diskthin] ? :thin : :thick,
       :adapterType => disk_type,
       :capacityKb => opts[:disksize]
     )
