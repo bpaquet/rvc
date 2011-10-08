@@ -124,6 +124,8 @@ def connect uri, opts
         vim.serviceInstance.CurrentTime
       rescue Exception
         vim._connection.restart_http
+        vim.serviceContent.sessionManager.Login :userName => username,
+                                                :password => password
         vim.serviceInstance.CurrentTime
       end
     end
