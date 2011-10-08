@@ -300,7 +300,7 @@ def answer vm, str
   q = vm.runtime.question
   choice = q.choice.choiceInfo.find { |x| x.label == str }
   err("invalid answer") unless choice
-  vm.AnswerVM :questionid => q.path, :answerChoice => choice.key
+  vm.AnswerVM :questionid => q.id, :answerChoice => choice.key
 end
 
 
