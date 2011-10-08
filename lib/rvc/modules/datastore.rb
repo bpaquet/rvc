@@ -115,7 +115,7 @@ def copy_vm_path src_object, from_file, dest_object, dest_file
     
     dest_object._connection.restart_http
     
-    len = r.read(10).to_i
+    len = r.read(20).to_i
     
     stream = ProgressStream.new(r, len) do |count, len|
       $stdout.write "\e[0G\e[Kcopying #{count}/#{len} bytes (#{(count*100)/len}%)"
@@ -129,7 +129,7 @@ def copy_vm_path src_object, from_file, dest_object, dest_file
   
   _download src_object, from_ds_name, from_path do |res|
     len = res.content_length
-    w.write sprintf("%10i", len)
+    w.write sprintf("%20i", len)
     res.read_body do |segment|
       w.write segment
     end
