@@ -84,6 +84,7 @@ class RbVmomi::VIM::VirtualMachine
   end
 
   def rvc_children_files
+    self.RefreshStorageInfo
     files = layoutEx.file
     datastore_map = RVC::Util.collect_children self, :datastore
     Hash[files.map do |file|
