@@ -119,7 +119,7 @@ def connect uri, opts
   Thread.new do
     while true
       sleep 600
-      # Allow one reconnection, if socket has been long time by transfer on other hosts
+      # Allow one reconnection, if socket has been closed because of time out (long time transfer on other hosts)
       begin
         vim.serviceInstance.CurrentTime
       rescue Exception
