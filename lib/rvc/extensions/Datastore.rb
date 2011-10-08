@@ -186,7 +186,7 @@ end
 class RbVmomi::VIM::Datastore::FakeDatastoreFile
   include RVC::InventoryObject
 
-  attr_reader :path, :datastore
+  attr_reader :path, :datastore, :info
 
   def initialize datastore, path, info
     @datastore = datastore
