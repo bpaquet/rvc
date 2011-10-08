@@ -81,7 +81,7 @@ class RbVmomi::VIM::Datastore::FakeDatastoreFolder
       RbVmomi::VIM::Datastore::FakeDatastoreFile.new(@datastore, "#{@path}/#{x.path}", x)
     end
   end
-
+  
   def children
     results = @datastore.browser.SearchDatastore_Task(
       :datastorePath => datastore_path,
@@ -90,7 +90,7 @@ class RbVmomi::VIM::Datastore::FakeDatastoreFolder
           :fileType => true,
           :fileSize => true,
           :fileOwner => false,
-          :modification => false
+          :modification => false,
         }
       }
     ).wait_for_completion
@@ -98,21 +98,58 @@ class RbVmomi::VIM::Datastore::FakeDatastoreFolder
     Hash[results.file.map { |x| [x.path, search_result_to_object(x)] }]
   end
 
+  def default_detail
+    {
+      :fileType => true,
+      :fileSize => true,
+      :fileOwner => false,
+      :modification => false,
+    }
+  end
+  
   def traverse_one arc
     browser, ds_name = @datastore.collect :browser, :name
     results = browser.SearchDatastore_Task(
       :datastorePath => "[#{ds_name}] #{@path}",
       :searchSpec => {
-        :details => {
-          :fileType => true,
-          :fileSize => true,
-          :fileOwner => false,
-          :modification => false
-        },
+        :details => default_detail,
         :matchPattern => [arc]
       }
     ).wait_for_completion
     return unless results.file.size == 1
+    if results.file[0].is_a? RbVmomi::VIM::VmDiskFileInfo
+      results = browser.SearchDatastore_Task(
+        :datastorePath => "[#{ds_name}] #{@path}",
+        :searchSpec => {
+          :details => default_detail,
+          :query => [RbVmomi::VIM::VmDiskFileQuery(
+            :details => {
+              :capacityKb => true,
+              :controllerType => true,
+              :diskExtents => true,
+              :diskType => true,
+              :hardwareVersion => true,
+              :thin => true,
+            }
+          )],
+          :matchPattern => [arc]
+        }
+      ).wait_for_completion
+    end
+    if results.file[0].is_a? RbVmomi::VIM::VmConfigFileInfo
+      results = browser.SearchDatastore_Task(
+        :datastorePath => "[#{ds_name}] #{@path}",
+        :searchSpec => {
+          :details => default_detail,
+          :query => [RbVmomi::VIM::VmConfigFileQuery(
+            :details => {
+              :configVersion => true,
+            }
+          )],
+          :matchPattern => [arc]
+        }
+      ).wait_for_completion
+    end
     search_result_to_object results.file[0]
   end
 
