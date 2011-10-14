@@ -117,6 +117,8 @@ def connect uri, opts
   end
 
   Thread.new do
+    Thread.current[:username] = username
+    Thread.current[:password] = password
     while true
       sleep 600
       # Allow one reconnection, if socket has been closed because of time out (long time transfer on other hosts)
@@ -124,8 +126,8 @@ def connect uri, opts
         vim.serviceInstance.CurrentTime
       rescue Exception
         vim._connection.restart_http
-        vim.serviceContent.sessionManager.Login :userName => username,
-                                                :password => password
+        vim.serviceContent.sessionManager.Login :userName => Thread.current[:username],
+                                                :password => Thread.current[:password]
         vim.serviceInstance.CurrentTime
       end
     end
