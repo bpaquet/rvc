@@ -188,6 +188,11 @@ def create dest, opts
     ],
   }
   if opts.controller
+    disk_controller_params = {
+      :key => 1000,
+      :busNumber => 0,
+      :sharedBus => :noSharing
+    }
     disk_controller = case opts.controller
     when "VirtualLsiLogicController"
       VIM.VirtualLsiLogicController(disk_controller_params)
