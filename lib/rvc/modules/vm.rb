@@ -134,19 +134,6 @@ def create dest, opts
   vmFolder, name = *dest
   datastore_path = "[#{opts[:datastore].name}]"
   network = opts[:network] || get_default_network(vmFolder)
-  disk_controller_params = {
-    :key => 1000,
-    :busNumber => 0,
-    :sharedBus => :noSharing
-  }
-  disk_controller = case opts.controller
-  when "VirtualLsiLogicController"
-    VIM.VirtualLsiLogicController(disk_controller_params)
-  when "VirtualLsiLogicSASController"
-    VIM.VirtualLsiLogicSASController(disk_controller_params)
-  else 
-    err "Unknown controller disk type : #{opts.controller}"
-  end
   config = {
     :name => name,
     :guestId => opts[:guestid],
@@ -156,9 +143,6 @@ def create dest, opts
     :deviceChange => [
       {
         :operation => :add,
-        :device => disk_controller,
-      }, {
-        :operation => :add,
         :fileOperation => :create,
         :device => VIM.VirtualDisk(
           :key => -1,
@@ -167,7 +151,7 @@ def create dest, opts
             :diskMode => :persistent,
             :thinProvisioned => opts[:diskthin]
           ),
-          :controllerKey => 1000,
+          :controllerKey => opts.controller ? 1000 : 200,
           :unitNumber => 0,
           :capacityInKB => opts[:disksize]
         )
@@ -203,6 +187,20 @@ def create dest, opts
       }
     ],
   }
+  if opts.controller
+    disk_controller = case opts.controller
+    when "VirtualLsiLogicController"
+      VIM.VirtualLsiLogicController(disk_controller_params)
+    when "VirtualLsiLogicSASController"
+      VIM.VirtualLsiLogicSASController(disk_controller_params)
+    else 
+      err "Unknown controller disk type : #{opts.controller}"
+    end
+    config[:deviceChange] << {
+        :operation => :add,
+        :device => disk_controller,
+      }
+  end
   vmFolder.CreateVM_Task(:config => config,
                          :pool => opts[:pool],
                          :host => opts[:host]).wait_for_completion
